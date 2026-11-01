@@ -141,7 +141,7 @@
 
     <div class="grid">
       <section class="card">
-        <h2>📡 1. Kết Nối Phòng TikTok Live & Giọng Đọc ZeroTTS (Mai Chi)</h2>
+        <h2>📡 1. Kết Nối Phòng TikTok Live & Giọng Đọc VieNeu-TTS (Minh Quân)</h2>
         <div class="row">
           <input type="text" id="ttUser" placeholder="Nhập @username TikTok đang phát Live..." />
           <button class="btn gold" id="btnConn">Kết Nối Live</button>
@@ -149,7 +149,7 @@
         </div>
         <div class="row">
           <input type="text" id="ttsDirectText" value="Nam mô A Di Đà Phật. Chùa Linh Ứng Online xin kính chào quý thí chủ thập phương." />
-          <button class="btn gold" id="btnSpeakMaiChi">🎙️ Đọc thử Giọng Mai Chi</button>
+          <button class="btn gold" id="btnSpeakMaiChi">🎙️ Đọc thử Giọng Minh Quân</button>
         </div>
         <audio id="adminAudioPreview" controls style="width: 100%; height: 38px;"></audio>
       </section>
@@ -222,7 +222,7 @@
     };
     document.getElementById('btnSpeakMaiChi').onclick = async () => {
       const text = document.getElementById('ttsDirectText').value.trim();
-      const data = await sendRpc('temple.speak', { text, voice: 'maichi', broadcast: true });
+      const data = await sendRpc('temple.speak', { text, voice: 'Minh Quân', broadcast: true });
       if (data?.result?.url) {
         const player = document.getElementById('adminAudioPreview');
         player.src = data.result.url;

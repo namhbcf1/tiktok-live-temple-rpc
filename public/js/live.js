@@ -137,7 +137,9 @@
         HALL_SEAT_COORDS.push({ side: 'R', row: r, col: c, x, y, scale });
       }
     }
-  })();
+  // Kh?i d?ng ho?t ?nh idle khi trang t?i
+playIdleAnimation();
+})();
 
   let lastRenderedLeaderboardJson = '';
 
@@ -160,6 +162,9 @@
       }
     });
 
+    // Hạch choir: lặp các tư thế khác nhau để tạo sự đa dạng thị giác
+    const HALL_POSES = ['kneel', 'kneel', 'bowMid', 'forehead', 'prostrate', 'prostrateDeep'];
+
     congregationHall.innerHTML = HALL_SEAT_COORDS.map((seat, idx) => {
       const viewer = seatViewerMap.get(idx);
       const badgeHtml = viewer
@@ -175,6 +180,10 @@
         `
         : '';
 
+      const poseIdx = (idx + seat.row) % HALL_POSES.length;
+      const poseKey = HALL_POSES[poseIdx];
+      const poseSrc = SPRITE_FRAMES[poseKey] || SPRITE_FRAMES.kneel;
+
       return `
         <div
           class="hall-seat"
@@ -182,9 +191,10 @@
           style="left: ${seat.x}px; top: ${seat.y}px; z-index: ${20 + seat.row * 2}; transform: translate(-50%, -100%) scale(${seat.scale});"
         >
           <img
-            src="/assets/devotee.png"
+            src="${poseSrc}"
             alt="Phật tử"
             class="devotee-sprite"
+            data-hall-pose="${poseKey}"
             style="animation-delay: ${((idx * 0.27) % 3.5).toFixed(2)}s;"
           />
           ${badgeHtml}
@@ -270,6 +280,97 @@
     schedulePose(startDelayMs + 5350, 'kneel');
   }
 
+  // =========================================================================
+  // IDLE ANIMATION — khi không làm lễ, nhân vật thở nhẹ / lắc người
+  // =========================================================================
+  const centralEl = document.getElementById('centralWorshipper');
+  function playIdleAnimation() {
+    if (!centralEl) return;
+    centralEl.classList.remove('walking-up', 'idle-sway', 'walk-natural', 'bow-deep', 'prostrate-flat');
+    centralEl.classList.add('idle-breathing');
+  }
+  function stopIdleAnimation() {
+    if (!centralEl) return;
+    centralEl.classList.remove('idle-breathing', 'idle-sway', 'walk-natural', 'bow-deep', 'prostrate-flat');
+  }
+
+  // =========================================================================
+  // CHUỂN ĐỘNG THÊM — các kiểu "các thứ các kiểu" theo yêu cầu
+  // =========================================================================
+  // Thiền Dục Hành: đi bộ chậm trên thảm đỏ rồi quỳ, lặp lại
+  function playWalkingMeditation(startDelayMs = 0) {
+    stopIdleAnimation();
+    const steps = [
+      { pose: 'walk1', delay: startDelayMs },
+      { pose: 'walk2', delay: startDelayMs + 140 },
+      { pose: 'walk1', delay: startDelayMs + 280 },
+      { pose: 'walk2', delay: startDelayMs + 420 },
+      { pose: 'walk1', delay: startDelayMs + 560 },
+      { pose: 'walk2', delay: startDelayMs + 700 },
+      { pose: 'kneelDown', delay: startDelayMs + 840 },
+      { pose: 'kneel', delay: startDelayMs + 1000 },
+      { pose: 'idle', delay: startDelayMs + 1160 },
+    ];
+    steps.forEach(s => schedulePose(s.delay, s.pose));
+    // Lặp lại chuỗi sau khi kết thúc
+    prostrationTimers.push(
+      setTimeout(() => playWalkingMeditation(startDelayMs + 1320), 1320)
+    );
+  }
+
+  // Lạy Ngũ thể Đầu Địa: quỳ -> chắp tay -> cúi -> prostrate -> prostrateDeep -> nâng lên
+  function playFullProstration(startDelayMs = 0) {
+    stopIdleAnimation();
+    const steps = [
+      { pose: 'kneel', delay: startDelayMs },
+      { pose: 'forehead', delay: startDelayMs + 200 },
+      { pose: 'bowMid', delay: startDelayMs + 360 },
+      { pose: 'prostrate', delay: startDelayMs + 520 },
+      { pose: 'prostrateDeep', delay: startDelayMs + 680 },
+      { pose: 'prostrate', delay: startDelayMs + 1040 },
+      { pose: 'bowMid', delay: startDelayMs + 1200 },
+      { pose: 'kneel', delay: startDelayMs + 1360 },
+      { pose: 'idle', delay: startDelayMs + 1520 },
+    ];
+    steps.forEach(s => schedulePose(s.delay, s.pose));
+  }
+
+  // Cúi Chắp Lặp Lại: đứng -> chắp tay -> cúi -> đứng -> lặp
+  function playBowingRepeat(startDelayMs = 0) {
+    stopIdleAnimation();
+    const steps = [
+      { pose: 'idle', delay: startDelayMs },
+      { pose: 'forehead', delay: startDelayMs + 300 },
+      { pose: 'bowMid', delay: startDelayMs + 460 },
+      { pose: 'idle', delay: startDelayMs + 620 },
+      { pose: 'forehead', delay: startDelayMs + 900 },
+      { pose: 'bowMid', delay: startDelayMs + 1060 },
+      { pose: 'idle', delay: startDelayMs + 1220 },
+      { pose: 'forehead', delay: startDelayMs + 1500 },
+      { pose: 'bowMid', delay: startDelayMs + 1660 },
+      { pose: 'idle', delay: startDelayMs + 1820 },
+    ];
+    steps.forEach(s => schedulePose(s.delay, s.pose));
+    prostrationTimers.push(
+      setTimeout(() => playBowingRepeat(startDelayMs + 1980), 1980)
+    );
+  }
+
+  // Đi Bộ Sunder: đi bộ nhanh rồi đứng im
+  function playWalkAround(startDelayMs = 0) {
+    stopIdleAnimation();
+    const steps = [
+      { pose: 'walk1', delay: startDelayMs },
+      { pose: 'walk2', delay: startDelayMs + 140 },
+      { pose: 'walk1', delay: startDelayMs + 280 },
+      { pose: 'walk2', delay: startDelayMs + 420 },
+      { pose: 'walk1', delay: startDelayMs + 560 },
+      { pose: 'walk2', delay: startDelayMs + 700 },
+      { pose: 'idle', delay: startDelayMs + 840 },
+    ];
+    steps.forEach(s => schedulePose(s.delay, s.pose));
+  }
+
   // Hiệu ứng thí chủ ĐỨNG ĐI BỘ từng bước dọc thảm đỏ rồi Hạ gối Quỳ Đảnh Lễ (trên cùng 1 nhân vật, không bao giờ mất hình)
   function animateWalkerOnCarpet(user, avatar, actionLabel, wish) {
     const centralEl = document.getElementById('centralWorshipper');
@@ -320,7 +421,10 @@
       clearProstrationTimers();
       const centralEl = document.getElementById('centralWorshipper');
       if (centralEl) centralEl.classList.remove('walking-up');
+      stopIdleAnimation();
       playThreeBowsSequence(0);
+    } else {
+      playIdleAnimation();
     }
     if (beam) {
       beam.classList.add('intense');
@@ -472,7 +576,7 @@
     if (!ev) return;
 
     if (ev.ttsText && ev.type !== 'drawFortune') {
-      audio.enqueueTts(ev.ttsText, { voice: ev.ttsVoice || 'maichi' });
+      audio.enqueueTts(ev.ttsText, { voice: ev.ttsVoice || 'Minh Quân' });
     }
 
     switch (ev.type) {
@@ -538,7 +642,7 @@
         );
         // Chỉ hiển thị tờ Quẻ Xăm đúng thời điểm giọng đọc bắt đầu vang lên!
         audio.enqueueTts(ev.ttsText || '', {
-          voice: ev.ttsVoice || 'maichi',
+          voice: ev.ttsVoice || 'Minh Quân',
           onStart: () => {
             audio.playIncenseChime();
             showFortuneModal(ev.user, ev.fortune);
@@ -629,7 +733,7 @@
         } else if (msg.method === 'tts.play') {
           if (msg.params?.url) {
             audio.enqueueTts(msg.params.text || 'Nam mô A Di Đà Phật', {
-              voice: msg.params.voice || 'maichi',
+              voice: msg.params.voice || 'Minh Quân',
               url: msg.params.url
             });
           }
@@ -842,4 +946,6 @@
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;');
   }
+// Kh?i d?ng ho?t ?nh idle khi trang t?i
+playIdleAnimation();
 })();

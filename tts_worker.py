@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 """
-Persistent ZeroTTS Worker Daemon (voice='maichi' default).
-- Strict Vietnamese-only text sanitizer: strips all Cuneiform (𒐫), Zalgo, emojis, and foreign scripts
-  before passing to ZeroTTS so the model never chokes or glitches.
-- Single-pass continuous synthesis + soft peak normalization (<= 0.90) + cosine fade-in/out.
-- Low CPU configuration: intra_op_num_threads=3 + OMP_WAIT_POLICY=PASSIVE (0% CPU when idle).
+Persistent VieNeu-TTS Worker Daemon (voice='Minh Quân' default, alias of preset 'Hải Đăng').
+- Giữ nguyên giao thức JSON qua stdin/stdout của bản ZeroTTS trước đây.
+- Làm sạch văn bản tiếng Việt: lọc ký tự lạ, emote, ký tự lặp; chuẩn hóa NFKC -> NFC.
+- Peak normalization (<= 0.90) + cosine fade-in/out để chống rè/xước.
 """
 import hashlib
 import json
@@ -20,19 +19,18 @@ os.environ.setdefault("OMP_NUM_THREADS", "3")
 os.environ.setdefault("OMP_WAIT_POLICY", "PASSIVE")
 os.environ.setdefault("MKL_NUM_THREADS", "3")
 os.environ.setdefault("OPENBLAS_NUM_THREADS", "3")
-os.environ.setdefault("VECLIB_MAXIMUM_THREADS", "3")
+os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS", "1")
+os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
 
 import numpy as np
-from zerotts import ZeroTTS, normalize_vi_text
-from zerotts.chunking import normalize_punctuation
+import soundfile as sf
+from vieneu import Vieneu
 
+DEFAULT_VOICE = "Minh Quân"
+# Tên giọng cũ (ZeroTTS) và tên không phân biệt hoa thường đều map về giọng VieNeu hợp lệ.
+LEGACY_VOICE_MAP = {"maichi": DEFAULT_VOICE, "mai chi": DEFAULT_VOICE}
 CACHE_DIR = Path(__file__).resolve().parent / "data" / "tts-cache"
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
-
-LOCAL_MODEL_CANDIDATES = [
-    os.environ.get("ZEROTTS_MODEL_PATH", ""),
-    "/Users/zens/Work/UIT/Projects/f1-metrics-explainer/models/zerotts",
-]
 
 # Chỉ giữ lại chữ cái tiếng Việt (Latin + dấu tiếng Việt), chữ số và dấu câu cơ bản
 VIETNAMESE_ALLOWED_RE = re.compile(
@@ -44,13 +42,6 @@ MULTI_PUNCT_RE = re.compile(r"([.,!?])\1+")
 MULTI_SPACE_RE = re.compile(r"\s+")
 
 
-def resolve_model_source() -> str:
-    for candidate in LOCAL_MODEL_CANDIDATES:
-        if candidate and os.path.isdir(candidate) and os.path.isfile(os.path.join(candidate, "config.json")):
-            return candidate
-    return "zeroweight-ai/ZeroTTS"
-
-
 def emit(payload: dict) -> None:
     sys.stdout.write(json.dumps(payload, ensure_ascii=False) + "\n")
     sys.stdout.flush()
@@ -59,29 +50,21 @@ def emit(payload: dict) -> None:
 def clean_and_normalize_text(raw_text: str) -> str:
     if not raw_text:
         return ""
-    # 1. Chuẩn hóa NFKC (biến chữ kiểu toán học 𝒯𝒽𝒾ê𝓃 𝒯â𝓂 -> Thiên Tâm) rồi NFC
     text = unicodedata.normalize("NFC", unicodedata.normalize("NFKC", str(raw_text)))
-    # 2. Xóa các mã emote kiểu [thanks], [rose]
     text = BRACKET_EMOTE_RE.sub(" ", text)
-    # 3. Xóa sạch ký tự lạ (𒐫, emoji, ký tự ngoại ngữ, ký tự điều khiển)
     text = VIETNAMESE_ALLOWED_RE.sub(" ", text)
-    # 4. Thu gọn ký tự lặp quá 2 lần (ví dụ: aaaaa -> aa, ..... -> .)
     text = MULTI_PUNCT_RE.sub(r"\1", text)
     text = REPEATED_CHARS_RE.sub(r"\1\1", text)
     text = MULTI_SPACE_RE.sub(" ", text).strip(" .,!?-")
 
-    # Phải có ít nhất 2 chữ cái hợp lệ mới đọc
     letters = re.findall(r"[a-zA-ZÀ-ỹĂăĐđĨĩŨũƠơƯư]", text)
     if len(letters) < 2:
         return ""
 
-    # Giới hạn độ dài an toàn cho 1 câu đọc TTS (tối đa 160 ký tự)
     if len(text) > 160:
         text = text[:160].rsplit(" ", 1)[0]
 
-    normalized = normalize_vi_text(text)
-    normalized = normalize_punctuation(normalized).strip()
-    normalized = VIETNAMESE_ALLOWED_RE.sub(" ", normalized)
+    normalized = VIETNAMESE_ALLOWED_RE.sub(" ", text)
     normalized = MULTI_SPACE_RE.sub(" ", normalized).strip()
     if normalized and normalized[-1] not in ".!?":
         normalized += "."
@@ -89,10 +72,10 @@ def clean_and_normalize_text(raw_text: str) -> str:
 
 
 def polish_waveform(wav: np.ndarray, sample_rate: int) -> np.ndarray:
-    """De-click ends and prevent PCM_16 digital clipping ('xước/rè')."""
+    """De-click ends and prevent digital clipping ('xước/rè')."""
     arr = np.asarray(wav, dtype=np.float32).reshape(-1)
     if arr.size == 0:
-        return arr.reshape(1, 0)
+        return arr
 
     arr = arr - np.mean(arr)
 
@@ -109,25 +92,29 @@ def polish_waveform(wav: np.ndarray, sample_rate: int) -> np.ndarray:
         ramp_out = 0.5 * (1.0 + np.cos(np.linspace(0, np.pi, fade_out, dtype=np.float32)))
         arr[-fade_out:] *= ramp_out
 
-    return arr.reshape(1, -1)
+    return arr
 
 
 def main() -> None:
     t0 = time.time()
-    model_src = resolve_model_source()
-    emit({"type": "status", "status": "loading", "model": model_src})
+    emit({"type": "status", "status": "loading", "model": "vieneu-v3-turbo"})
 
     try:
-        tts = ZeroTTS.from_pretrained(model_src, intra_op_num_threads=3)
-        voices = tts.list_voices()
-        default_voice = "maichi" if "maichi" in voices else (voices[0] if voices else None)
+        tts = Vieneu()
+        # list_preset_voices trả về (nhãn hiển thị, id giọng); alias như 'Minh Quân' không nằm trong danh sách này
+        # nhưng vẫn được infer() resolve (đã kiểm tra khi tổng hợp thử).
+        preset_ids = [vid for _label, vid in tts.list_preset_voices()]
+        voice_ids = list(dict.fromkeys([DEFAULT_VOICE] + preset_ids))
+        case_map = {v.lower(): v for v in voice_ids}
+        case_map.update(LEGACY_VOICE_MAP)
+        sample_rate = int(getattr(tts, "sample_rate", 24000))
         load_sec = round(time.time() - t0, 2)
         emit({
             "type": "ready",
-            "model": model_src,
-            "voice": default_voice,
-            "voices": voices,
-            "sampleRate": int(tts.sample_rate),
+            "model": "vieneu-v3-turbo",
+            "voice": DEFAULT_VOICE,
+            "voices": voice_ids,
+            "sampleRate": sample_rate,
             "loadSec": load_sec,
         })
     except Exception as exc:
@@ -139,6 +126,12 @@ def main() -> None:
         })
         sys.exit(1)
 
+    def resolve_voice(requested: str) -> str:
+        key = (requested or "").strip().lower()
+        if not key:
+            return DEFAULT_VOICE
+        return case_map.get(key, DEFAULT_VOICE)
+
     for line in sys.stdin:
         line = line.strip()
         if not line:
@@ -148,17 +141,15 @@ def main() -> None:
             req = json.loads(line)
             req_id = req.get("id")
             text = (req.get("text") or "").strip()
-            voice = (req.get("voice") or "maichi").strip().lower()
-            if voice not in voices:
-                voice = "maichi"
+            voice = resolve_voice(req.get("voice") or DEFAULT_VOICE)
 
             norm_text = clean_and_normalize_text(text)
             if not norm_text:
                 emit({"type": "result", "id": req_id, "ok": False, "error": "Filtered empty/spam text"})
                 continue
 
-            cache_key = hashlib.sha1(f"v3::{voice}::{norm_text}".encode("utf-8")).hexdigest()[:20]
-            out_name = f"{voice}_{cache_key}.wav"
+            cache_key = hashlib.sha1(f"vieneu-v1::{voice}::{norm_text}".encode("utf-8")).hexdigest()[:20]
+            out_name = f"vieneu_{cache_key}.wav"
             out_path = CACHE_DIR / out_name
 
             if out_path.is_file() and out_path.stat().st_size > 200:
@@ -175,15 +166,16 @@ def main() -> None:
                 continue
 
             t_synth = time.time()
-            raw_wav = tts.synthesize(norm_text, voice=voice, eoa_extra_frames=2)
+            raw_wav = tts.infer(norm_text, voice=voice)
+            raw_wav = np.asarray(raw_wav)
             if raw_wav is None or raw_wav.size == 0:
                 emit({"type": "result", "id": req_id, "ok": False, "error": "No audio generated"})
                 continue
 
-            clean_audio = polish_waveform(raw_wav, int(tts.sample_rate))
-            tts.save_audio(clean_audio, str(out_path))
+            clean_audio = polish_waveform(raw_wav, sample_rate)
+            sf.write(str(out_path), clean_audio, sample_rate, subtype="PCM_16")
             synth_sec = round(time.time() - t_synth, 2)
-            duration_sec = round(clean_audio.shape[-1] / float(tts.sample_rate), 2)
+            duration_sec = round(clean_audio.shape[-1] / float(sample_rate), 2)
 
             emit({
                 "type": "result",

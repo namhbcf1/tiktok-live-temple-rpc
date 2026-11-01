@@ -12,7 +12,7 @@ class TempleAudioEngine {
     this.sfxEnabled = true;
     this.bgMusicEnabled = true;
     this.ttsEnabled = true;
-    this.ttsVoice = 'maichi';
+    this.ttsVoice = 'Minh Quân';
 
     // Nhạc nền "Nam Mô A Di Đà Phật.m4a" — mặc định 65%, cho phép chỉnh trực tiếp 0% - 100%
     const savedMusicVol = parseFloat(localStorage.getItem('temple_music_vol'));
@@ -318,7 +318,7 @@ class TempleAudioEngine {
     const item = {
       id: `tts_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
       text: clean,
-      voice: (options.voice || this.ttsVoice || 'maichi').toLowerCase(),
+      voice: (options.voice || this.ttsVoice || 'Minh Quân').toLowerCase(),
       url: options.url || null,
       onStart,
       onEnd,
@@ -333,7 +333,7 @@ class TempleAudioEngine {
     this.processTtsQueue();
   }
 
-  async fetchZeroTtsAudio(text, voice = 'maichi') {
+  async fetchZeroTtsAudio(text, voice = 'Minh Quân') {
     try {
       const res = await fetch('/api/tts', {
         method: 'POST',

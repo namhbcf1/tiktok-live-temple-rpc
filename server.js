@@ -101,15 +101,15 @@ const FORTUNE_DECK = [
 ];
 
 // ============================================================================
-// 2. ZEROTTS PYTHON WORKER MANAGER (VOICE: MAI CHI)
+// 2. ZEROTTS PYTHON WORKER MANAGER (VOICE: MINH QUÂN)
 // ============================================================================
 class ZeroTTSManager {
   constructor() {
     this.proc = null;
     this.ready = false;
     this.status = 'starting';
-    this.voice = 'maichi';
-    this.voices = ['maichi'];
+    this.voice = 'Minh Quân';
+    this.voices = ['Minh Quân'];
     this.model = 'zeroweight-ai/ZeroTTS';
     this.pending = new Map();
     this.inflight = new Map();
@@ -121,18 +121,20 @@ class ZeroTTSManager {
   resolvePythonBin() {
     const venvPy = path.join(__dirname, '.venv', 'bin', 'python');
     if (fs.existsSync(venvPy)) return venvPy;
+    const venvPyWin = path.join(__dirname, '.venv', 'Scripts', 'python.exe');
+    if (fs.existsSync(venvPyWin)) return venvPyWin;
     return 'python3';
   }
 
   startWorker() {
     const pyBin = this.resolvePythonBin();
     const scriptPath = path.join(__dirname, 'tts_worker.py');
-    console.log(`[ZeroTTS] Khởi chạy worker với ${pyBin} (Giọng mặc định: Mai Chi)...`);
+    console.log(`[ZeroTTS] Khởi chạy worker với ${pyBin} (Giọng mặc định: Minh Quân)...`);
 
     this.status = 'loading';
     this.proc = spawn(pyBin, [scriptPath], {
       cwd: __dirname,
-      stdio: ['pipe', 'pipe', 'pipe']
+      stdio: ['pipe', 'pipe', 'pipe'], env: { ...process.env, PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8' }
     });
 
     this.proc.stdout.on('data', (chunk) => {
@@ -172,8 +174,8 @@ class ZeroTTSManager {
       } else if (msg.type === 'ready') {
         this.ready = true;
         this.status = 'ready';
-        this.voice = msg.voice || 'maichi';
-        this.voices = msg.voices || ['maichi'];
+        this.voice = msg.voice || 'Minh Quân';
+        this.voices = msg.voices || ['Minh Quân'];
         this.model = msg.model || this.model;
         console.log(`[ZeroTTS] Sẵn sàng sau ${msg.loadSec}s! Giọng: ${this.voice} (${this.voices.join(', ')})`);
         broadcastNotification('tts.status', this.getStatus());
@@ -198,8 +200,8 @@ class ZeroTTSManager {
     return {
       ready: this.ready,
       status: this.status,
-      engine: 'ZeroTTS (zeroweight-ai/ZeroTTS)',
-      voice: state.settings.ttsVoice || this.voice || 'maichi',
+      engine: 'VieNeu-TTS (pnnbao-ump/VieNeu-TTS-v3-Turbo)',
+      voice: state.settings.ttsVoice || this.voice || 'Minh Quân',
       voices: this.voices,
       model: this.model
     };
@@ -208,7 +210,7 @@ class ZeroTTSManager {
   synthesize(text, voiceOverride) {
     const cleanText = String(text || '').trim();
     if (!cleanText) return Promise.resolve({ ok: false, error: 'Empty text' });
-    const voice = (voiceOverride || state.settings.ttsVoice || 'maichi').toLowerCase();
+    const voice = (voiceOverride || state.settings.ttsVoice || 'Minh Quân').toLowerCase();
     const dedupKey = `${voice}::${cleanText}`;
 
     if (this.inflight.has(dedupKey)) {
@@ -259,7 +261,7 @@ const DEFAULT_STATE = {
   recentEvents: [],
   settings: {
     ttsEnabled: true,
-    ttsVoice: 'maichi',
+    ttsVoice: 'Minh Quân',
     bgMusicEnabled: true,
     sfxEnabled: true,
     smokeDensity: 1.0,
@@ -445,7 +447,7 @@ function getPublicState() {
     recentEvents: state.recentEvents.slice(0, 15),
     settings: state.settings,
     tiktok: state.tiktok,
-    tts: zeroTts ? zeroTts.getStatus() : { ready: false, status: 'init', voice: 'maichi' }
+    tts: zeroTts ? zeroTts.getStatus() : { ready: false, status: 'init', voice: 'Minh Quân' }
   };
 }
 
@@ -478,12 +480,41 @@ const Rituals = {
       merit,
       wish,
       ttsText,
-      ttsVoice: state.settings.ttsVoice || 'maichi'
+      ttsVoice: state.settings.ttsVoice || 'Minh Quân'
     });
 
     saveState();
     broadcastNotification('temple.event', { event, state: getPublicState() });
     return { event, state: getPublicState() };
+  },
+
+  welcomeVisitor(params = {}) {
+    const user = sanitizeUserName(params.user);
+    const uniqueId = params.uniqueId || '';
+    const key = uniqueId || user;
+    const now = Date.now();
+    const last = visitorGreetMap.get(key) || 0;
+    if (now - last < VISITOR_GREET_COOLDOWN_MS) {
+      return null;
+    }
+    visitorGreetMap.set(key, now);
+    if (visitorGreetMap.size > 800) {
+      visitorGreetMap.delete(visitorGreetMap.keys().next().value);
+    }
+
+    const ttsText = `Nam mô A Di Đà Phật. Hoan nghênh thí chủ ${user} đã vào Chánh Điện lễ Phật.`;
+    const event = pushEventLog({
+      type: 'memberJoin',
+      user,
+      uniqueId,
+      avatar: params.avatar || '',
+      merit: 0,
+      ttsText,
+      ttsVoice: state.settings.ttsVoice || 'Minh Quân'
+    });
+
+    broadcastNotification('temple.event', { event, state: getPublicState() });
+    return { event };
   },
 
   strikeWoodenFish(params = {}) {
@@ -535,7 +566,7 @@ const Rituals = {
       merit,
       wish,
       ttsText,
-      ttsVoice: state.settings.ttsVoice || 'maichi'
+      ttsVoice: state.settings.ttsVoice || 'Minh Quân'
     });
 
     saveState();
@@ -565,7 +596,7 @@ const Rituals = {
       wish,
       merit,
       ttsText,
-      ttsVoice: state.settings.ttsVoice || 'maichi'
+      ttsVoice: state.settings.ttsVoice || 'Minh Quân'
     });
 
     saveState();
@@ -614,7 +645,7 @@ const Rituals = {
       merit,
       wish,
       ttsText,
-      ttsVoice: state.settings.ttsVoice || 'maichi'
+      ttsVoice: state.settings.ttsVoice || 'Minh Quân'
     });
 
     saveState();
@@ -646,7 +677,7 @@ const Rituals = {
       fortune,
       merit,
       ttsText,
-      ttsVoice: state.settings.ttsVoice || 'maichi'
+      ttsVoice: state.settings.ttsVoice || 'Minh Quân'
     });
 
     saveState();
@@ -699,6 +730,8 @@ const Rituals = {
 let tiktokConn = null;
 
 const commentCooldownMap = new Map();
+const visitorGreetMap = new Map();
+const VISITOR_GREET_COOLDOWN_MS = 8000;
 
 function parseViewerComment(commentText, user, uniqueId, avatar) {
   const raw = String(commentText || '').trim();
@@ -893,6 +926,7 @@ async function connectTikTokLive(usernameOrUrl) {
     const { user, uniqueId, avatar } = extractUserFromEvent(data);
     recordDevotee(user, uniqueId, avatar, 1, 0, 0, 'Đã vào Chánh Điện lễ Phật');
     broadcastNotification('temple.state', getPublicState());
+    Rituals.welcomeVisitor({ user, uniqueId, avatar });
   });
 
   tiktokConn.on(WebcastEvent.CHAT, (data) => {
@@ -1064,7 +1098,7 @@ async function handleRpcCall(method, params = {}) {
     case 'temple.comment':
       return parseViewerComment(params.comment, params.user, params.uniqueId, params.avatar);
     case 'temple.speak': {
-      const res = await zeroTts.synthesize(params.text, params.voice || 'maichi');
+      const res = await zeroTts.synthesize(params.text, params.voice || 'Minh Quân');
       if (res.ok && params.broadcast !== false) {
         broadcastNotification('tts.play', {
           text: params.text,
@@ -1129,10 +1163,10 @@ app.post('/rpc', async (req, res) => {
   }
 });
 
-// ZeroTTS HTTP Endpoint (Mai Chi default)
+// ZeroTTS HTTP Endpoint (Minh Quân default)
 app.all('/api/tts', async (req, res) => {
   const text = (req.body?.text || req.query?.text || '').trim();
-  const voice = (req.body?.voice || req.query?.voice || state.settings.ttsVoice || 'maichi').trim();
+  const voice = (req.body?.voice || req.query?.voice || state.settings.ttsVoice || 'Minh Quân').trim();
   if (!text) {
     return res.status(400).json({ ok: false, error: 'Thiếu nội dung text cần đọc' });
   }
@@ -1211,6 +1245,12 @@ server.listen(PORT, () => {
   console.log(`🎛️ Bảng điều khiển RPC Admin: http://localhost:${PORT}/admin`);
   console.log(`🔌 JSON-RPC 2.0 Endpoint   : http://localhost:${PORT}/rpc (ws://localhost:${PORT}/ws)`);
   console.log(`============================================================`);
+
+  // Tự khôi phục chế độ giả lập nếu đã bật từ trước (autoSim lưu trong merit-state.json)
+  if (state.settings.autoSim) {
+    console.log(`[Auto-Sim] Khôi phục giả lập: mỗi ${state.settings.autoSimIntervalMs || 9500}ms`);
+    configureAutoSim(true);
+  }
 
   // Tự động kết nối tới @zenfacts_vn ngay khi khởi động server
   const defaultChannel = process.env.TIKTOK_USER || state.tiktok?.username || 'zenfacts_vn';

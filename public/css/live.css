@@ -405,6 +405,23 @@ body.obs-mode .stage-wrapper {
   animation: centralWalkUpCarpet 2.1s linear forwards;
 }
 
+/* Lớp hoạt ảnhIdle — áp qua JS khi nhân vật không làm lễ */
+.central-worshipper.idle-breathing {
+  animation: idleBreathe 4s ease-in-out infinite;
+}
+.central-worshipper.idle-sway {
+  animation: idleSway 5s ease-in-out infinite;
+}
+.central-worshipper.walk-natural {
+  animation: walkNatural 1.2s ease-in-out infinite;
+}
+.central-worshipper.bow-deep {
+  animation: bowDeep 2.2s ease-in-out;
+}
+.central-worshipper.prostrate-flat {
+  animation: prostrateFlat 2.6s ease-in-out;
+}
+
 @keyframes centralWalkUpCarpet {
   0% {
     transform: translate3d(-50%, 490px, 0) scale(1.06);
@@ -412,6 +429,43 @@ body.obs-mode .stage-wrapper {
   100% {
     transform: translate3d(-50%, 0px, 0) scale(1);
   }
+}
+
+/* IDLE BREATHING — thở nhẹ khi nhân vật đứng yên */
+@keyframes idleBreathe {
+  0%, 100% { transform: translate3d(-50%, 0, 0) scale(1); }
+  50% { transform: translate3d(-50%, -6px, 0) scale(1.008); }
+}
+
+/* NGẰM MƯA — lắc người nhẹ khi chờ */
+@keyframes idleSway {
+  0%, 100% { transform: translate3d(-50%, 0, 0) rotate(0deg); }
+  33% { transform: translate3d(-50%, 2px, 0) rotate(-0.8deg); }
+  66% { transform: translate3d(-50%, -2px, 0) rotate(0.8deg); }
+}
+
+/* BƯỚC ĐI TỰ NHIÊN — chân chạy vào nhau trên thảm đỏ */
+@keyframes walkNatural {
+  0% { transform: translate3d(-50%, 0, 0) scale(1) rotate(0deg); }
+  25% { transform: translate3d(-50%, -8px, 0) scale(1.01) rotate(-1.5deg); }
+  50% { transform: translate3d(-50%, 0, 0) scale(1) rotate(0deg); }
+  75% { transform: translate3d(-50%, -8px, 0) scale(1.01) rotate(1.5deg); }
+  100% { transform: translate3d(-50%, 0, 0) scale(1) rotate(0deg); }
+}
+
+/* CÚI SÂU — co người xuống rồi nâng lên */
+@keyframes bowDeep {
+  0% { transform: translate3d(-50%, 0, 0) scale(1) rotateX(0deg); }
+  30% { transform: translate3d(-50%, 14px, 0) scale(0.97) rotateX(18deg); }
+  70% { transform: translate3d(-50%, 14px, 0) scale(0.97) rotateX(18deg); }
+  100% { transform: translate3d(-50%, 0, 0) scale(1) rotateX(0deg); }
+}
+
+/* LẠY SÁT ĐẤT — thân 납 xuống gần đất */
+@keyframes prostrateFlat {
+  0% { transform: translate3d(-50%, 0, 0) scale(1, 1); }
+  30% { transform: translate3d(-50%, 12px, 0) scale(1.05, 0.72); }
+  100% { transform: translate3d(-50%, 0, 0) scale(1, 1); }
 }
 
 .central-sprite-stack {
@@ -429,6 +483,9 @@ body.obs-mode .stage-wrapper {
   height: 162px;
   opacity: 0;
   pointer-events: none;
+  /* CROSS-FADE: chuyển đổi mượt mà giữa các khung hình thay vì đổi tức thì */
+  transition: opacity 0.32s ease-in-out, transform 0.32s cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: opacity;
 }
 
 .pose-frame[data-pose="walk1"],
